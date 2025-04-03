@@ -30,8 +30,8 @@ AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, li
 URLS = [
     "*.gov",
     "*.com",
-    "*.edu",
     "*.org",
+    "*.edu",
     "*.net",
     "*.co",
 ]
@@ -94,7 +94,7 @@ def get_jobs_from_url(
         "url": url,
         "filter": [f"~mime:.*/{format}$", "=status:200"],
         "output": "json",
-        "fl": "url,timestamp,mime,languages,encoding",
+        "fl": "url,timestamp,mime",
         "page": page,
     }
 
