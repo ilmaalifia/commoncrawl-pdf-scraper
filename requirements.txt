@@ -1,0 +1,8 @@
+future
+requests
+aiohttp
+langchain
+pymilvus
+numpy
+bs4
+tenacity
