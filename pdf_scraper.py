@@ -21,12 +21,11 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
-from utils import setup_logger
+from utils import USER_AGENT, setup_logger
 from vectorisation import Vectorisation
 
 logger = setup_logger()
 INDEX_SERVER = "http://index.commoncrawl.org"
-AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
 URLS = [
     "*.gov",
     "*.com",
@@ -39,7 +38,6 @@ MIME_TYPES = [
     "pdf",
     "html",
 ]
-
 jobs_queue = Queue()
 vect = Vectorisation()
 mv = Milvus()
@@ -105,7 +103,7 @@ def get_jobs_from_url(
         response = requests.get(
             index_api,
             params=params,
-            headers={"user-agent": AGENT, "accept": "application/json"},
+            headers={"user-agent": USER_AGENT, "accept": "application/json"},
         )
         if response.status_code == 200:
             jobs = response.content.decode("utf-8").splitlines()
@@ -153,7 +151,7 @@ async def fetch_job_pdf(session, job):
         ):
             with attempt:
                 async with session.get(
-                    job["url"], timeout=10, headers={"user-agent": AGENT}
+                    job["url"], timeout=10, headers={"user-agent": USER_AGENT}
                 ) as response:
                     pdf_bytes = await response.read()
                     is_duplicate = await mv.is_duplicate(job["url"], len(pdf_bytes))
@@ -187,7 +185,7 @@ async def fetch_job_html(session, job):
         ):
             with attempt:
                 async with session.get(
-                    job["url"], timeout=10, headers={"user-agent": AGENT}
+                    job["url"], timeout=10, headers={"user-agent": USER_AGENT}
                 ) as response:
                     html = await response.text()
                     pdf_urls = await find_pdf_url_from_html(html, job["url"])
