@@ -121,17 +121,23 @@ class Milvus:
         return results
 
     def query_by_source(self, source):
-        res = self.client.query(
+        return self.client.query(
             collection_name=self.collection_name,
             filter=f'source=="{source}"',
             output_fields=[
                 "page",
+                "text",
                 "source",
                 "timestamp",
                 "total_size",
             ],
         )
-        return res
+
+    def delete_by_source(self, source):
+        return self.client.delete(
+            collection_name=self.collection_name,
+            filter=f'source=="{source}"',
+        )
 
     async def is_duplicate(self, source, total_size):
         res = self.query_by_source(source)
@@ -143,3 +149,14 @@ class Milvus:
         ):
             return True
         return False
+
+
+if __name__ == "__main__":
+    milvus = Milvus()
+    print(milvus.get_collection_stats())
+    print(milvus.list_indexes())
+    print(
+        milvus.query_by_source(
+            "https://liftoff.energy.gov/wp-content/uploads/2025/01/Fact-Sheet-_-Virtual-Power-Plants-_-Updated-2.5.25.pdf"
+        )
+    )

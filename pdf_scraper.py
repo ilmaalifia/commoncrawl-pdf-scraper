@@ -1,9 +1,7 @@
 import argparse
 import asyncio
 import json
-import logging
 import re
-import sys
 import time
 from datetime import datetime
 from multiprocessing import cpu_count
@@ -15,7 +13,6 @@ from urllib.parse import urljoin
 import aiohttp
 import requests
 from bs4 import BeautifulSoup
-from embeddings_transformer import EmbeddingsTransformer
 from milvus import Milvus
 from tenacity import (
     AsyncRetrying,
@@ -24,22 +21,10 @@ from tenacity import (
     stop_after_attempt,
     wait_exponential,
 )
+from utils import setup_logger
+from vectorisation import Vectorisation
 
-logger = logging.getLogger(__name__)
-logger.setLevel("INFO")
-
-if logger.hasHandlers():
-    logger.handlers.clear()
-
-formatter = logging.Formatter(
-    fmt="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
-
+logger = setup_logger()
 INDEX_SERVER = "http://index.commoncrawl.org"
 AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3"
 URLS = [
@@ -56,7 +41,7 @@ MIME_TYPES = [
 ]
 
 jobs_queue = Queue()
-ec = EmbeddingsTransformer()
+vect = Vectorisation()
 mv = Milvus()
 counter = {"success": 0, "failed": 0, "empty_or_duplicate": 0}
 failed = {}
@@ -80,10 +65,9 @@ def get_index_api(index_name):
     return collinfo[0]["cdx-api"] if collinfo else None
 
 
-def get_num_pages(index_api, url, format: Literal["pdf", "html"] = "pdf"):
+def get_num_pages(index_api, url):
     params = {
         "url": url,
-        "filter": [f"~mime:.*/{format}$", "=status:200"],
         "showNumPages": True,
     }
 
@@ -154,11 +138,8 @@ async def find_pdf_url_from_html(html_content, base_url):
             if href.startswith(("http://", "https://")):
                 pdf_urls.append(href)
             else:
-                # Convert relative URLs to absolute
-                absolute_url = urljoin(base_url, href)
-                pdf_urls.append(absolute_url)
-        else:
-            continue
+                # Convert relative url to absolute url
+                pdf_urls.append(urljoin(base_url, href))
 
     return pdf_urls
 
@@ -179,7 +160,7 @@ async def fetch_job_pdf(session, job):
                     if is_duplicate:
                         counter["empty_or_duplicate"] += 1
                     else:
-                        vector_data = await ec.generate_pdf_embeddings_from_bytes(
+                        vector_data = await vect.generate_embeddings_from_pdf_bytes(
                             pdf_bytes, job["url"], job["timestamp"]
                         )
                         inserted = await mv.insert_data(vector_data)
@@ -234,8 +215,40 @@ async def run_workers(num_workers):
         await asyncio.gather(*tasks)
 
 
-if __name__ == "__main__":
+def test():
+    jobs = [
+        {
+            "timestamp": "20241204155509",
+            "url": "https://liftoff.energy.gov/vpp/",
+            "mime": "text/html",
+        },
+        {
+            "timestamp": "20241213055142",
+            "url": "https://repository.library.noaa.gov/pdfjs/web/viewer.html?file=https://repository.library.noaa.gov/view/noaa/48516/noaa_48516_DS1.pdf",
+            "mime": "text/html",
+        },
+        {
+            "timestamp": "20250324122124",
+            "url": "https://www.36thdistrictcourtmi.gov/docs/default-source/general-information/ncsc-reports/admin_ncsc-d36-final-report_-20140612.pdf?sfvrsn=2",
+            "mime": "application/pdf",
+        },
+    ]
 
+    for job in jobs:
+        jobs_queue.put(job)
+
+    try:
+        num_workers = cpu_count() * 2
+    except NotImplementedError:
+        num_workers = 4
+
+    asyncio.run(run_workers(num_workers=num_workers))
+    mv.reindex()
+    logger.info(counter)
+    logger.info(json.dumps(failed))
+
+
+def main():
     parser = argparse.ArgumentParser(description="CommonCrawl PDF Scraper")
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -278,3 +291,9 @@ if __name__ == "__main__":
         logger.info(json.dumps(failed))
     else:
         logger.warning(f"Index {raw_index_name} not found.")
+
+
+if __name__ == "__main__":
+    # test()
+
+    main()
