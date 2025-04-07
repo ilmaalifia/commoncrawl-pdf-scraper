@@ -6,7 +6,7 @@ from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from utils import setup_logger
 
-logger = setup_logger()
+logger = setup_logger(__name__)
 
 
 class Vectorisation:

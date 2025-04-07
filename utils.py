@@ -4,8 +4,8 @@ import sys
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
 
 
-def setup_logger():
-    logger = logging.getLogger(__name__)
+def setup_logger(name=__name__):
+    logger = logging.getLogger(name)
     logger.setLevel("INFO")
 
     if logger.hasHandlers():

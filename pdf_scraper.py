@@ -1,6 +1,7 @@
 import argparse
 import asyncio
 import json
+import os
 import re
 from datetime import datetime
 from multiprocessing import cpu_count
@@ -15,10 +16,9 @@ from tenacity import AsyncRetrying, retry, stop_after_attempt, wait_exponential
 from utils import USER_AGENT, setup_logger
 from vectorisation import Vectorisation
 
-logger = setup_logger()
+logger = setup_logger(__name__)
 INDEX_SERVER = "http://index.commoncrawl.org"
 URLS = [
-    # "https://liftoff.energy.gov/vpp/",
     "*.gov",
     # "*.com",
     # "*.org",
@@ -30,11 +30,12 @@ MIME_TYPES = [
     "pdf",
     "html",
 ]
+PAGE_SIZE = 10
 pagination_url_queue = asyncio.Queue()
 absolute_url_queue = asyncio.Queue()
 vect = Vectorisation()
 mv = Milvus()
-counter = {"success": 0, "failed": 0, "empty_or_duplicate": 0}
+counter = {"success": 0, "failed": 0, "empty": 0, "duplicate": 0}
 failed = {}
 
 
@@ -56,6 +57,7 @@ def get_index_api(index_name):
 def get_num_pages(index_api, url):
     params = {
         "url": url,
+        "pageSize": PAGE_SIZE,
         "showNumPages": True,
     }
     pages = 1
@@ -99,7 +101,7 @@ async def fetch_pagination_url(session, job):
             f"Failed to fetch pagination url {e.request_info.url}: {e.status} {e.message}"
         )
     finally:
-        await asyncio.sleep(random() * 2)
+        await asyncio.sleep(5 + random() * 5)
 
 
 async def fetch_absolute_url_pdf(session, job):
@@ -112,11 +114,10 @@ async def fetch_absolute_url_pdf(session, job):
                 async with session.get(
                     job["url"], timeout=10, headers={"user-agent": USER_AGENT}
                 ) as response:
-                    response.raise_for_status()
                     pdf_bytes = await response.read()
                     is_duplicate = await mv.is_duplicate(job["url"], len(pdf_bytes))
                     if is_duplicate:
-                        counter["empty_or_duplicate"] += 1
+                        counter["duplicate"] += 1
                     else:
                         vector_data = await vect.generate_embeddings_from_pdf_bytes(
                             pdf_bytes, job["url"], job["timestamp"]
@@ -129,14 +130,14 @@ async def fetch_absolute_url_pdf(session, job):
                                 f"Successfully inserted {inserted['insert_count']} data of {job['url']}"
                             )
                         else:
-                            counter["empty_or_duplicate"] += 1
+                            counter["empty"] += 1
     except Exception as e:
         counter["failed"] += 1
         failed[job["url"]] = str(e)
         logger.error(f"Failed to fetch pdf {job['url']}: {e}")
     finally:
         logger.info(
-            f"Success: {counter['success']}, Failed: {counter['failed']}, Empty or Duplicate: {counter['empty_or_duplicate']}"
+            f"Success: {counter['success']}, Failed: {counter['failed']}, Empty: {counter['empty']}, Duplicate: {counter['duplicate']}"
         )
 
 
@@ -158,11 +159,17 @@ async def fetch_absolute_url_html(session, job):
                             session, {"url": pdf_url, "timestamp": job["timestamp"]}
                         )
     except Exception as e:
+        counter["failed"] += 1
+        failed[job["url"]] = str(e)
         logger.error(f"Failed to fetch html {job['url']}: {e}")
+    finally:
+        logger.info(
+            f"Success: {counter['success']}, Failed: {counter['failed']}, Empty: {counter['empty']}, Duplicate: {counter['duplicate']}"
+        )
 
 
-async def find_pdf_url_from_html(html_content, base_url):
-    soup = BeautifulSoup(html_content, "html.parser")
+async def find_pdf_url_from_html(html_text, base_url):
+    soup = BeautifulSoup(html_text, "html.parser")
     pdf_urls = []
 
     # Handle file viewer link
@@ -173,7 +180,7 @@ async def find_pdf_url_from_html(html_content, base_url):
 
     # Handle link in href tag
     for link in soup.find_all("a", href=True):
-        href = link["href"]
+        href = link["href"].replace("\\", "/")
 
         if href.endswith(".pdf"):
             if href.startswith(("http://", "https://")):
@@ -200,11 +207,10 @@ async def pagination_producer(index_api):
                             "output": "json",
                             "fl": "url,timestamp,mime",
                             "page": page,
+                            "pageSize": PAGE_SIZE,
                         }
                     )
-    logger.info(
-        f"Finished pagination producer for {index_api}. Pagination queue size: {pagination_url_queue.qsize()}"
-    )
+    logger.info(f"Finished pagination producer for {index_api}")
 
 
 async def pagination_url_consumer(session):
@@ -217,9 +223,7 @@ async def pagination_url_consumer(session):
                 pagination_url_queue.task_done()
         except asyncio.CancelledError:
             break
-    logger.info(
-        f"Finished pagination url consumer. Absolute url queue size: {absolute_url_queue.qsize()}"
-    )
+    logger.info(f"Finished pagination url consumer")
 
 
 async def absolute_url_consumer(session):
@@ -246,12 +250,11 @@ async def run_workers(num_workers, index_api):
 
         pagination_url_consumers = [
             asyncio.create_task(pagination_url_consumer(session))
-            for _ in range(num_workers)
         ]
 
         absolute_url_consumers = [
             asyncio.create_task(absolute_url_consumer(session))
-            for _ in range(num_workers)
+            for _ in range(num_workers * 2)
         ]
 
         await pagination_url_queue.join()
@@ -265,10 +268,22 @@ async def run_workers(num_workers, index_api):
 
 def generate_num_workers():
     try:
-        num_workers = cpu_count() * 2
+        num_workers = cpu_count()
     except NotImplementedError:
         num_workers = 4
     return num_workers
+
+
+def save_dict_as_json(data: dict, filename: str, indent: int = 4):
+    try:
+        current_dir = os.getcwd()
+        path = os.path.join(current_dir, filename)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=indent, ensure_ascii=False)
+    except TypeError as e:
+        raise TypeError(f"Data contains non-serializable objects: {e}")
+    except Exception as e:
+        raise IOError(f"Failed to write JSON file: {e}")
 
 
 def main():
@@ -290,18 +305,19 @@ def main():
         current_year = datetime.now().isocalendar()[0]
         raw_index_name = f"CC-MAIN-{current_year}-{current_week}"
 
-    index_name = get_index_api(raw_index_name)
-
-    if index_name:
-        num_workers = generate_num_workers()
-        asyncio.run(run_workers(num_workers, index_name))
+    try:
+        index_name = get_index_api(raw_index_name)
+        if index_name:
+            num_workers = generate_num_workers()
+            asyncio.run(run_workers(num_workers, index_name))
+        else:
+            logger.warning(f"Index {raw_index_name} is not found")
+    finally:
         mv.reindex()
+        save_dict_as_json(failed, "failed_urls.json")
         logger.info(
-            f"Success: {counter['success']}, Failed: {counter['failed']}, Empty or Duplicate: {counter['empty_or_duplicate']}"
+            f"Success: {counter['success']}, Failed: {counter['failed']}, Empty: {counter['empty']}, Duplicate: {counter['duplicate']}"
         )
-        logger.info(f"Failed URLs: {json.dumps(failed)}")
-    else:
-        logger.warning(f"Index {raw_index_name} not found.")
 
 
 if __name__ == "__main__":

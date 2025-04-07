@@ -155,8 +155,4 @@ if __name__ == "__main__":
     milvus = Milvus()
     print(milvus.get_collection_stats())
     print(milvus.list_indexes())
-    print(
-        milvus.query_by_source(
-            "https://liftoff.energy.gov/wp-content/uploads/2025/01/Fact-Sheet-_-Virtual-Power-Plants-_-Updated-2.5.25.pdf"
-        )
-    )
+    print(milvus.query_by_source(""))
