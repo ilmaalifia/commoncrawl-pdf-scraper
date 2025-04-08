@@ -2,10 +2,10 @@ import argparse
 import asyncio
 import json
 import os
+import random
 import re
 from datetime import datetime
 from multiprocessing import cpu_count
-from random import random
 from urllib.parse import urljoin
 
 import aiohttp
@@ -94,6 +94,7 @@ async def fetch_pagination_url(session, job):
                     jobs = await response.read()
                     if jobs:
                         jobs = jobs.splitlines()
+                        random.shuffle(jobs)
                         for job in jobs:
                             await absolute_url_queue.put(json.loads(job))
     except aiohttp.ClientResponseError as e:
@@ -101,7 +102,7 @@ async def fetch_pagination_url(session, job):
             f"Failed to fetch pagination url {e.request_info.url}: {e.status} {e.message}"
         )
     finally:
-        await asyncio.sleep(5 + random() * 5)
+        await asyncio.sleep(5 + random.random() * 5)
 
 
 async def fetch_absolute_url_pdf(session, job):
