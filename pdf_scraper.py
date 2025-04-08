@@ -292,7 +292,7 @@ def main():
     group.add_argument(
         "--index-name",
         type=str,
-        required=False,
+        required=True,
         help="CC index name to use. Format: CC-MAIN-YYYY-WW",
     )
 
