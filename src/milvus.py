@@ -33,7 +33,10 @@ class Milvus:
 
         self.client.load_collection(collection_name=self.collection_name)
         state = self.client.get_load_state(collection_name=self.collection_name)
-        logger.info(f"Collection {self.collection_name} state: {state.get('state')}")
+
+        logger.info(f"Collection state: {state.get('state')}")
+        logger.info(f"Collection stats: {self.get_collection_stats()}")
+        logger.info(f"Collection indexes: {self.list_indexes()}")
 
     async def insert_data(self, data):
         return self.client.insert(collection_name=self.collection_name, data=data)
@@ -200,5 +203,3 @@ class Milvus:
 
 if __name__ == "__main__":
     milvus = Milvus()
-    print(milvus.get_collection_stats())
-    print(milvus.list_indexes())
