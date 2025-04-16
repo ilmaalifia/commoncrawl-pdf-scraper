@@ -20,18 +20,19 @@ logger = setup_logger(__name__)
 INDEX_SERVER = "http://index.commoncrawl.org"
 URLS = [
     "*.gov",
-    # "*.com",
-    # "*.org",
-    # "*.edu",
-    # "*.net",
-    # "*.co",
+    "*.com",
+    "*.org",
+    "*.edu",
+    "*.net",
+    "*.co",
 ]
 MIME_TYPES = [
     "pdf",
     "html",
 ]
-PAGE_SIZE = 5
+CC_PAGE_SIZE = int(os.getenv("CC_PAGE_SIZE", "10"))
 TEST = os.getenv("TEST", "false").lower() == "true"
+
 pagination_url_queue = asyncio.Queue()
 absolute_url_queue = asyncio.Queue()
 vect = Vectorisation()
@@ -63,7 +64,7 @@ def get_num_pages(index_api, url):
 
     params = {
         "url": url,
-        "pageSize": PAGE_SIZE,
+        "pageSize": CC_PAGE_SIZE,
         "showNumPages": True,
     }
 
@@ -215,7 +216,7 @@ async def pagination_producer(index_api):
                             "output": "json",
                             "fl": "url,timestamp,mime",
                             "page": page,
-                            "pageSize": PAGE_SIZE,
+                            "pageSize": CC_PAGE_SIZE,
                         }
                     )
     logger.info(f"Finished pagination producer for {index_api}")

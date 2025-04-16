@@ -126,6 +126,7 @@ class Milvus:
             index_params=index_params,
         )
         self.client.refresh_load(collection_name=self.collection_name)
+        logger.info(f"Reindexing completed")
 
     def search(self, query_embedding, top_k: int = 3):
         results = self.client.search(
