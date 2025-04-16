@@ -30,11 +30,12 @@ MIME_TYPES = [
     "pdf",
     "html",
 ]
-PAGE_SIZE = 10
+PAGE_SIZE = 5
+TEST = os.getenv("TEST", "false").lower() == "true"
 pagination_url_queue = asyncio.Queue()
 absolute_url_queue = asyncio.Queue()
 vect = Vectorisation()
-mv = Milvus()
+milvus = Milvus()
 counter = {"success": 0, "failed": 0, "empty": 0, "duplicate": 0}
 failed = {}
 
@@ -55,12 +56,17 @@ def get_index_api(index_name):
     wait=wait_exponential(multiplier=1, min=1, max=10),
 )
 def get_num_pages(index_api, url):
+    pages = 1
+
+    if TEST:
+        return pages
+
     params = {
         "url": url,
         "pageSize": PAGE_SIZE,
         "showNumPages": True,
     }
-    pages = 1
+
     try:
         session = requests.Session()
         r = session.get(index_api, params=params).json()
@@ -116,14 +122,14 @@ async def fetch_absolute_url_pdf(session, job):
                     job["url"], timeout=10, headers={"user-agent": USER_AGENT}
                 ) as response:
                     pdf_bytes = await response.read()
-                    is_duplicate = await mv.is_duplicate(job["url"], len(pdf_bytes))
+                    is_duplicate = await milvus.is_duplicate(job["url"], len(pdf_bytes))
                     if is_duplicate:
                         counter["duplicate"] += 1
                     else:
                         vector_data = await vect.generate_embeddings_from_pdf_bytes(
                             pdf_bytes, job["url"], job["timestamp"]
                         )
-                        inserted = await mv.insert_data(vector_data)
+                        inserted = await milvus.insert_data(vector_data)
 
                         if inserted.get("insert_count", 0) > 0:
                             counter["success"] += 1
@@ -197,6 +203,7 @@ async def pagination_producer(index_api):
     logger.info(f"Starting pagination producer for {index_api}")
     for url in URLS:
         num_pages = get_num_pages(index_api, url)
+        logger.info(f"Number of pages for {url}: {num_pages}")
         if num_pages:
             for page in range(num_pages):
                 for mime_type in MIME_TYPES:
@@ -314,7 +321,7 @@ def main():
         else:
             logger.warning(f"Index {raw_index_name} is not found")
     finally:
-        mv.reindex()
+        milvus.reindex()
         save_dict_as_json(failed, "failed_urls.json")
         logger.info(
             f"Success: {counter['success']}, Failed: {counter['failed']}, Empty: {counter['empty']}, Duplicate: {counter['duplicate']}"

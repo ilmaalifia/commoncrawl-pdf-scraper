@@ -1,10 +1,14 @@
+import os
 import uuid
 
 import fitz
+from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from utils import setup_logger
+
+load_dotenv()
 
 logger = setup_logger(__name__)
 
@@ -12,8 +16,7 @@ logger = setup_logger(__name__)
 class Vectorisation:
     def __init__(self):
         self.model_embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2",
-            model_kwargs={"device": "cpu"},
+            model_name=os.getenv("DENSE_MODEL"),
         )
 
     def generate_embedding(self, data):
@@ -27,7 +30,7 @@ class Vectorisation:
 
         chunks = []
         data = []
-        splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=200)
+        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
 
         try:
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
@@ -44,6 +47,7 @@ class Vectorisation:
                         )
 
                 chunks = splitter.split_documents(document_generator())
+
         except Exception as e:
             logger.error(f"Error opening PDF: {e}")
             return []
@@ -52,7 +56,7 @@ class Vectorisation:
             data.append(
                 {
                     "id": str(uuid.uuid4()),
-                    "vector": self.generate_embedding(chunk.page_content),
+                    "dense_vector": self.generate_embedding(chunk.page_content),
                     "text": chunk.page_content,
                     "source": chunk.metadata["source"],
                     "page": chunk.metadata["page"],
