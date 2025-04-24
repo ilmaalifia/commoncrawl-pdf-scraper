@@ -324,7 +324,8 @@ def main():
             logger.warning(f"Index {raw_index_name} is not found")
     finally:
         milvus.reindex()
-        save_dict_as_json(failed, "failed_urls.json")
+        url_filename = "_".join(urls).replace("*", "").replace(".", "")
+        save_dict_as_json(failed, f"failed_urls_{url_filename}.json")
         logger.info(
             f"Success: {counter['success']}, Failed: {counter['failed']}, Empty: {counter['empty']}, Duplicate: {counter['duplicate']}"
         )
