@@ -1,16 +1,16 @@
 #!/bin/bash
 #SBATCH -J pdf-scraper
-#SBATCH -c 8        
-#SBATCH --mail-type=ALL       
+#SBATCH -c 16    
+#SBATCH --mail-type=ALL   
 #SBATCH --mail-user=<email@example.com>
-#SBATCH --output=job_test_%j.log   
+#SBATCH --output=job_test_%j.log
 
 # Create a directory for this job on the node
 ScratchDir="/local/${SLURM_JOBID}"
 if [ -d "$ScratchDir" ]; then
-   echo "'$ScratchDir' already found !"
+   echo "'$ScratchDir' already found!"
 else
-   echo "'$ScratchDir' not found, creating !"
+   echo "'$ScratchDir' not found, creating!"
    mkdir $ScratchDir
 fi
 cd $ScratchDir
@@ -22,10 +22,11 @@ cp -r ${SLURM_SUBMIT_DIR}/* $ScratchDir
 module load miniconda3/3.8
 if [ ! -d "$ScratchDir/.conda/envs/pdf-scraper" ]; then
    conda create -n pdf-scraper python=3.13.0 -y
+   conda init bash
    source $ScratchDir/.bashrc
 fi
 conda activate pdf-scraper
-pip install -r --no-cache-dir $ScratchDir/requirements.txt
+pip install --no-cache-dir -r $ScratchDir/requirements.txt
 
 # It's nice to have some information logged for debugging
 echo "Date              : $(date)"
