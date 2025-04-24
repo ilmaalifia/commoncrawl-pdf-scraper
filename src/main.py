@@ -18,14 +18,6 @@ from vectorisation import Vectorisation
 
 logger = setup_logger(__name__)
 INDEX_SERVER = "http://index.commoncrawl.org"
-URLS = [
-    "*.gov",
-    "*.com",
-    "*.org",
-    "*.edu",
-    "*.net",
-    "*.co",
-]
 MIME_TYPES = [
     "pdf",
     "html",
@@ -200,9 +192,9 @@ async def find_pdf_url_from_html(html_text, base_url):
     return pdf_urls
 
 
-async def pagination_producer(index_api):
+async def pagination_producer(index_api, urls):
     logger.info(f"Starting pagination producer for {index_api}")
-    for url in URLS:
+    for url in urls:
         num_pages = get_num_pages(index_api, url)
         logger.info(f"Number of pages for {url}: {num_pages}")
         if num_pages:
@@ -253,9 +245,9 @@ async def absolute_url_consumer(session):
     logger.info(f"Finished absolute url consumer")
 
 
-async def run_workers(num_workers, index_api):
+async def run_workers(num_workers, index_api, urls):
     async with aiohttp.ClientSession() as session:
-        await pagination_producer(index_api)
+        await pagination_producer(index_api, urls)
 
         pagination_url_consumers = [
             asyncio.create_task(pagination_url_consumer(session))
@@ -302,7 +294,14 @@ def main():
         "--index-name",
         type=str,
         required=False,
-        help="CC index name to use. Format: CC-MAIN-YYYY-WW",
+        help="CC index name to use with format CC-MAIN-<YYYY>-<WW>. Example: CC-MAIN-2025-13",
+    )
+    parser.add_argument(
+        "--url",
+        action="append",
+        default=[],
+        required=True,
+        help='URL pattern to scrape. Example: --url="*.gov" --url="*.com" --url="*.org"',
     )
 
     args = parser.parse_args()
@@ -314,11 +313,13 @@ def main():
         current_year = datetime.now().isocalendar()[0]
         raw_index_name = f"CC-MAIN-{current_year}-{current_week}"
 
+    urls = args.url
+
     try:
         index_name = get_index_api(raw_index_name)
         if index_name:
             num_workers = generate_num_workers()
-            asyncio.run(run_workers(num_workers, index_name))
+            asyncio.run(run_workers(num_workers, index_name, urls))
         else:
             logger.warning(f"Index {raw_index_name} is not found")
     finally:
