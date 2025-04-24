@@ -2,7 +2,7 @@
 SBATCH -J pdf-scraper
 SBATCH -c 8        
 # SBATCH --mail-type=ALL       
-# SBATCH --mail-user=<your email>
+# SBATCH --mail-user=email@example.com
 SBATCH --output=job_test_%j.log   
 
 # Create a directory for this job on the node
@@ -16,7 +16,7 @@ fi
 cd $ScratchDir
 
 # Copy input and executable to the node
-cp -r ${SLURM_SUBMIT_DIR}/pdf-scraper/* $ScratchDir
+cp -r ${SLURM_SUBMIT_DIR}/* $ScratchDir
 
 # Manage environment 
 module load miniconda3/3.8
@@ -40,7 +40,6 @@ python src/main.py --index-name=CC-MAIN-2025-13
 
 # Copy output back to the master, comment with # if not used
 cp failed_urls.json ${SLURM_SUBMIT_DIR}/pdf-scraper
-mv output ${SLURM_SUBMIT_DIR}/pdf-scraper
 
 # Clean up on the compute node!
 cd ~
