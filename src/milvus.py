@@ -95,7 +95,7 @@ class Milvus:
         )
 
         bm25_function = Function(
-            name="text_bm25_emb",
+            name="bm25_function",
             input_field_names=["text"],
             output_field_names=["sparse_vector"],
             function_type=FunctionType.BM25,
@@ -128,29 +128,30 @@ class Milvus:
         self.client.refresh_load(collection_name=self.collection_name)
         logger.info(f"Reindexing completed")
 
-    def search(self, query_embedding, top_k: int = 3):
-        results = self.client.search(
+    def dense_search(self, query_embedding, top_k: int = 3):
+        return self.client.search(
             collection_name=self.collection_name,
             data=[query_embedding],
             limit=top_k,
             output_fields=["text", "source", "page", "timestamp"],
+            anns_field="dense_vector",
             search_params={"metric_type": "COSINE"},
         )
 
-        return_results = []
-        for hits in results:
-            for hit in hits:
-                return_results.append(
-                    {
-                        "score": hit["distance"],
-                        "text": hit["entity"]["text"],
-                        "page": hit["entity"]["page"],
-                        "source": hit["entity"]["source"],
-                        "timestamp": hit["entity"]["timestamp"],
-                        "total_size": hit["entity"]["total_size"],
-                    }
-                )
-        return return_results
+    def sparse_search(self, query):
+        return self.client.search(
+            collection_name=self.collection_name,
+            data=[query],
+            anns_field="sparse_vector",
+            limit=10,
+            search_params={"metric_type": "BM25"},
+            output_fields=[
+                "text",
+                "page",
+                "source",
+                "timestamp",
+            ],
+        )
 
     def get_collection_stats(self):
         return self.client.get_collection_stats(self.collection_name)
