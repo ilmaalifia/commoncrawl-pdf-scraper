@@ -1,9 +1,9 @@
 #!/bin/bash
-SBATCH -J pdf-scraper
-SBATCH -c 8        
-# SBATCH --mail-type=ALL       
-# SBATCH --mail-user=email@example.com
-SBATCH --output=job_test_%j.log   
+#SBATCH -J pdf-scraper
+#SBATCH -c 8        
+#SBATCH --mail-type=ALL       
+#SBATCH --mail-user=<email@example.com>
+#SBATCH --output=job_test_%j.log   
 
 # Create a directory for this job on the node
 ScratchDir="/local/${SLURM_JOBID}"
@@ -36,10 +36,11 @@ echo "Starting worker   : "
 caseName=${PWD##*/} # to distinguish several log files
 # Run the job -- make sure that it terminates itself before time is up
 # Do not submit into the background (i.e. no & at the end of the line).
-python src/main.py --index-name=CC-MAIN-2025-13
+srun -N1 -n1 --exclusive python src/main.py --index-name=CC-MAIN-2025-13 -url="*.gov" &
+srun -N1 -n1 --exclusive python src/main.py --index-name=CC-MAIN-2025-13 -url="*.com"
 
 # Copy output back to the master, comment with # if not used
-cp failed_urls.json ${SLURM_SUBMIT_DIR}/pdf-scraper
+cp *.json ${SLURM_SUBMIT_DIR}/pdf-scraper
 
 # Clean up on the compute node!
 cd ~
