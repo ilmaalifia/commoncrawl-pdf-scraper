@@ -11,9 +11,9 @@ from urllib.parse import urljoin
 import aiohttp
 import requests
 from bs4 import BeautifulSoup
-from milvus import Milvus
+from src.milvus import Milvus
+from src.utils import USER_AGENT, setup_logger
 from tenacity import AsyncRetrying, retry, stop_after_attempt, wait_exponential
-from utils import USER_AGENT, setup_logger
 from vectorisation import Vectorisation
 
 logger = setup_logger(__name__)

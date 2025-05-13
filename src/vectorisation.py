@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from utils import setup_logger
+from src.utils import setup_logger
 
 load_dotenv()
 

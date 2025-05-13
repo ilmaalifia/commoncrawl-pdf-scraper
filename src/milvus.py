@@ -9,7 +9,7 @@ from pymilvus import (
     FunctionType,
     MilvusClient,
 )
-from utils import setup_logger
+from src.utils import setup_logger
 
 load_dotenv()
 
@@ -29,9 +29,7 @@ class Milvus:
                 collection_name=self.collection_name,
                 schema=self.create_schema(),
             )
-            self.reindex()
-
-        self.client.load_collection(collection_name=self.collection_name)
+        self.reindex()
         state = self.client.get_load_state(collection_name=self.collection_name)
 
         logger.info(f"Collection state: {state.get('state')}")
@@ -125,7 +123,7 @@ class Milvus:
             collection_name=self.collection_name,
             index_params=index_params,
         )
-        self.client.refresh_load(collection_name=self.collection_name)
+        self.client.load_collection(collection_name=self.collection_name)
         logger.info(f"Reindexing completed")
 
     def dense_search(self, query_embedding, top_k: int = 3):
