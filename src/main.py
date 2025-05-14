@@ -13,8 +13,8 @@ import requests
 from bs4 import BeautifulSoup
 from src.milvus import Milvus
 from src.utils import USER_AGENT, setup_logger
+from src.vectorisation import Vectorisation
 from tenacity import AsyncRetrying, retry, stop_after_attempt, wait_exponential
-from vectorisation import Vectorisation
 
 logger = setup_logger(__name__)
 INDEX_SERVER = "http://index.commoncrawl.org"
@@ -104,7 +104,7 @@ async def fetch_pagination_url(session, job):
         await asyncio.sleep(5 + random.random() * 5)
 
 
-async def fetch_absolute_url_pdf(session, job):
+async def fetch_absolute_url_pdf(session, job, topics):
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(3),
@@ -120,15 +120,17 @@ async def fetch_absolute_url_pdf(session, job):
                         counter["duplicate"] += 1
                     else:
                         vector_data = await vect.generate_embeddings_from_pdf_bytes(
-                            pdf_bytes, job["url"], job["timestamp"]
+                            pdf_bytes, job["url"], job["timestamp"], topics
                         )
-                        inserted = await milvus.insert_data(vector_data)
-
-                        if inserted.get("insert_count", 0) > 0:
-                            counter["success"] += 1
-                            logger.info(
-                                f"Successfully inserted {inserted['insert_count']} data of {job['url']}"
-                            )
+                        if vector_data:
+                            inserted = await milvus.insert_data(vector_data)
+                            if inserted.get("insert_count", 0) > 0:
+                                counter["success"] += 1
+                                logger.info(
+                                    f"Successfully inserted {inserted['insert_count']} data of {job['url']}"
+                                )
+                            else:
+                                counter["empty"] += 1
                         else:
                             counter["empty"] += 1
     except Exception as e:
@@ -227,7 +229,7 @@ async def pagination_url_consumer(session):
     logger.info(f"Finished pagination url consumer")
 
 
-async def absolute_url_consumer(session):
+async def absolute_url_consumer(session, topics):
     logger.info(f"Starting absolute url consumer")
     while True:
         try:
@@ -235,7 +237,7 @@ async def absolute_url_consumer(session):
             if job:
                 logger.info(f"Processing absolute url: {job.get('url')}")
                 if "pdf" in job.get("mime", ""):
-                    await fetch_absolute_url_pdf(session, job)
+                    await fetch_absolute_url_pdf(session, job, topics)
                 elif "html" in job.get("mime", ""):
                     await fetch_absolute_url_html(session, job)
                 absolute_url_queue.task_done()
@@ -245,7 +247,7 @@ async def absolute_url_consumer(session):
     logger.info(f"Finished absolute url consumer")
 
 
-async def run_workers(num_workers, index_api, urls):
+async def run_workers(num_workers, index_api, urls, topics):
     async with aiohttp.ClientSession() as session:
         await pagination_producer(index_api, urls)
 
@@ -254,7 +256,7 @@ async def run_workers(num_workers, index_api, urls):
         ]
 
         absolute_url_consumers = [
-            asyncio.create_task(absolute_url_consumer(session))
+            asyncio.create_task(absolute_url_consumer(session, topics))
             for _ in range(num_workers * 2)
         ]
 
@@ -303,6 +305,13 @@ def main():
         required=True,
         help='URL pattern to scrape. Example: --url="*.gov" --url="*.com" --url="*.org"',
     )
+    parser.add_argument(
+        "--topic",
+        action="append",
+        default=[],
+        required=True,
+        help='Topic to match with PDF document content. Example: --topic="virtual power plant" --topic="vertical farming"',
+    )
 
     args = parser.parse_args()
 
@@ -314,12 +323,12 @@ def main():
         raw_index_name = f"CC-MAIN-{current_year}-{current_week}"
 
     urls = args.url
-
+    topics = args.topic
     try:
         index_name = get_index_api(raw_index_name)
         if index_name:
             num_workers = generate_num_workers()
-            asyncio.run(run_workers(num_workers, index_name, urls))
+            asyncio.run(run_workers(num_workers, index_name, urls, topics))
         else:
             logger.warning(f"Index {raw_index_name} is not found")
     finally:
@@ -329,6 +338,7 @@ def main():
         logger.info(
             f"Success: {counter['success']}, Failed: {counter['failed']}, Empty: {counter['empty']}, Duplicate: {counter['duplicate']}"
         )
+        logger.info(f"Total scanned: {sum(counter.values())}")
 
 
 if __name__ == "__main__":

@@ -3,10 +3,11 @@ import uuid
 
 import fitz
 from dotenv import load_dotenv
+from langchain_community.utils.math import cosine_similarity
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from src.utils import setup_logger
+from src.utils import NUMBER_OF_PAGES_TO_CHECK, SIMILARITY_THRESHOLD, setup_logger
 
 load_dotenv()
 
@@ -22,8 +23,28 @@ class Vectorisation:
     def generate_embedding(self, data):
         return self.model_embeddings.embed_query(data)
 
+    def topic_checking(self, topics: list[str], doc) -> bool:
+        # Pass checking if no topic is provided
+        if not topics:
+            return True
+
+        pages = " ".join([page.get_text() for page in doc])
+        pages_embedding = [self.generate_embedding(pages)]
+        topic_embeddings = [self.generate_embedding(topic) for topic in topics]
+        similarities = cosine_similarity(topic_embeddings, pages_embedding)
+
+        for topic, similarity in zip(topics, similarities):
+            logger.info(f"Similarity for topic '{topic}': {similarity[0]}")
+            if similarity[0] < SIMILARITY_THRESHOLD:
+                return False
+        return True
+
     async def generate_embeddings_from_pdf_bytes(
-        self, pdf_bytes: bytes | bytearray, url, timestamp
+        self,
+        pdf_bytes: bytes | bytearray,
+        url: str,
+        timestamp: str | int,
+        topics: list[str],
     ):
         if not pdf_bytes:
             return []
@@ -34,6 +55,8 @@ class Vectorisation:
 
         try:
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                if not self.topic_checking(topics, doc[:NUMBER_OF_PAGES_TO_CHECK]):
+                    return []
 
                 def document_generator():
                     for page in doc:
@@ -47,7 +70,6 @@ class Vectorisation:
                         )
 
                 chunks = splitter.split_documents(document_generator())
-
         except Exception as e:
             logger.error(f"Error opening PDF: {e}")
             return []
