@@ -10,10 +10,10 @@ from urllib.parse import urljoin
 
 import aiohttp
 import requests
+from app.milvus import Milvus
+from app.utils import USER_AGENT, setup_logger
+from app.vectorisation import Vectorisation
 from bs4 import BeautifulSoup
-from src.milvus import Milvus
-from src.utils import USER_AGENT, setup_logger
-from src.vectorisation import Vectorisation
 from tenacity import AsyncRetrying, retry, stop_after_attempt, wait_exponential
 
 logger = setup_logger(__name__)

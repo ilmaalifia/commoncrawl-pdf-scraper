@@ -1,5 +1,6 @@
 import os
 
+from app.utils import setup_logger
 from dotenv import load_dotenv
 from pymilvus import (
     CollectionSchema,
@@ -9,7 +10,6 @@ from pymilvus import (
     FunctionType,
     MilvusClient,
 )
-from src.utils import setup_logger
 
 load_dotenv()
 

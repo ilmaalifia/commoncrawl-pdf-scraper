@@ -2,12 +2,12 @@ import os
 import uuid
 
 import fitz
+from app.utils import NUMBER_OF_PAGES_TO_CHECK, SIMILARITY_THRESHOLD, setup_logger
 from dotenv import load_dotenv
 from langchain_community.utils.math import cosine_similarity
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_text_splitters import SentenceTransformersTokenTextSplitter
-from src.utils import NUMBER_OF_PAGES_TO_CHECK, SIMILARITY_THRESHOLD, setup_logger
 
 load_dotenv()
 
