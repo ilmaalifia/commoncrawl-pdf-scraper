@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 from langchain_community.utils.math import cosine_similarity
 from langchain_core.documents import Document
 from langchain_huggingface import HuggingFaceEmbeddings
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_text_splitters import SentenceTransformersTokenTextSplitter
 from src.utils import NUMBER_OF_PAGES_TO_CHECK, SIMILARITY_THRESHOLD, setup_logger
 
 load_dotenv()
@@ -35,9 +35,9 @@ class Vectorisation:
 
         for topic, similarity in zip(topics, similarities):
             logger.info(f"Similarity for topic '{topic}': {similarity[0]}")
-            if similarity[0] < SIMILARITY_THRESHOLD:
-                return False
-        return True
+            if similarity[0] >= SIMILARITY_THRESHOLD:
+                return True
+        return False
 
     async def generate_embeddings_from_pdf_bytes(
         self,
@@ -51,7 +51,10 @@ class Vectorisation:
 
         chunks = []
         data = []
-        splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+
+        splitter = SentenceTransformersTokenTextSplitter(
+            model_name=os.getenv("DENSE_MODEL"),
+        )
 
         try:
             with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:

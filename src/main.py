@@ -156,6 +156,8 @@ async def fetch_absolute_url_html(session, job):
                     response.raise_for_status()
                     html = await response.text()
                     pdf_urls = await find_pdf_url_from_html(html, job["url"])
+                    if not pdf_urls:
+                        counter["empty"] += 1
                     for pdf_url in pdf_urls:
                         await fetch_absolute_url_pdf(
                             session, {"url": pdf_url, "timestamp": job["timestamp"]}
@@ -190,7 +192,6 @@ async def find_pdf_url_from_html(html_text, base_url):
             else:
                 # Convert relative url to absolute url
                 pdf_urls.append(urljoin(base_url, href))
-
     return pdf_urls
 
 
