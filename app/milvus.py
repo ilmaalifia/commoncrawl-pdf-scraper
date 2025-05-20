@@ -29,7 +29,8 @@ class Milvus:
                 collection_name=self.collection_name,
                 schema=self.create_schema(),
             )
-        self.reindex()
+            self.reindex()
+
         state = self.client.get_load_state(collection_name=self.collection_name)
 
         logger.info(f"Collection state: {state.get('state')}")
@@ -63,7 +64,7 @@ class Milvus:
                     name="text",
                     description="Text of the current snippet",
                     dtype=DataType.VARCHAR,
-                    max_length=2048,
+                    max_length=3000,
                     enable_analyzer=True,  # allows Milvus to tokenize text for sparse vectorisation
                     analyzer_params={"type": "english"},
                 ),
@@ -71,7 +72,7 @@ class Milvus:
                     name="source",
                     description="Source link of the PDF document",
                     dtype=DataType.VARCHAR,
-                    max_length=2048,
+                    max_length=3000,
                 ),
                 FieldSchema(
                     name="page",
