@@ -29,7 +29,7 @@ class Milvus:
                 collection_name=self.collection_name,
                 schema=self.create_schema(),
             )
-            self.reindex()
+            self.create_index()
 
         state = self.client.get_load_state(collection_name=self.collection_name)
 
@@ -103,7 +103,7 @@ class Milvus:
 
         return schema
 
-    def reindex(self):
+    def create_index(self):
         index_params = self.client.prepare_index_params()
         index_params.add_index(
             index_name="dense_index",
@@ -125,7 +125,7 @@ class Milvus:
             index_params=index_params,
         )
         self.client.load_collection(collection_name=self.collection_name)
-        logger.info(f"Reindexing completed")
+        logger.info(f"Creating index is completed")
 
     def dense_search(self, query_embedding, top_k: int = 3):
         return self.client.search(
