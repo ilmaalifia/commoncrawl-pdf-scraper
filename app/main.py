@@ -76,8 +76,11 @@ async def fetch_pagination_url(session, job):
     """
     jobs = []
     index_api = job.pop("index_api", None)
+    mime = job.pop("mime", None)
 
-    logger.info(f"Fetching pagination url for {job['url']} page {job['page']}")
+    logger.info(
+        f"Fetching pagination url for {job['url']} mime-type {mime} page {job['page']}"
+    )
     try:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(3),
@@ -95,7 +98,9 @@ async def fetch_pagination_url(session, job):
                         jobs = jobs.splitlines()
                         random.shuffle(jobs)
                         for job in jobs:
-                            await absolute_url_queue.put(json.loads(job))
+                            job_dict = json.loads(job)
+                            if job_dict.get("url"):
+                                await absolute_url_queue.put(job_dict)
     except aiohttp.ClientResponseError as e:
         logger.warning(
             f"Failed to fetch pagination url {e.request_info.url}: {e.status} {e.message}"
@@ -212,6 +217,7 @@ async def pagination_producer(index_api, urls):
                             "fl": "url,timestamp,mime",
                             "page": page,
                             "pageSize": CC_PAGE_SIZE,
+                            "mime": mime_type,
                         }
                     )
     logger.info(f"Finished pagination producer for {index_api}")
@@ -222,9 +228,8 @@ async def pagination_url_consumer(session):
     while True:
         try:
             job = await pagination_url_queue.get()
-            if job:
-                await fetch_pagination_url(session, job)
-                pagination_url_queue.task_done()
+            await fetch_pagination_url(session, job)
+            pagination_url_queue.task_done()
         except asyncio.CancelledError:
             break
     logger.info(f"Finished pagination url consumer")
@@ -235,13 +240,12 @@ async def absolute_url_consumer(session, topics):
     while True:
         try:
             job = await absolute_url_queue.get()
-            if job:
-                logger.info(f"Processing absolute url: {job.get('url')}")
-                if "pdf" in job.get("mime", ""):
-                    await fetch_absolute_url_pdf(session, job, topics)
-                elif "html" in job.get("mime", ""):
-                    await fetch_absolute_url_html(session, job)
-                absolute_url_queue.task_done()
+            logger.info(f"Processing absolute url: {job.get('url')}")
+            if "pdf" in job.get("mime", ""):
+                await fetch_absolute_url_pdf(session, job, topics)
+            elif "html" in job.get("mime", ""):
+                await fetch_absolute_url_html(session, job)
+            absolute_url_queue.task_done()
         except asyncio.CancelledError:
             break
 
@@ -258,7 +262,7 @@ async def run_workers(num_workers, index_api, urls, topics):
 
         absolute_url_consumers = [
             asyncio.create_task(absolute_url_consumer(session, topics))
-            for _ in range(num_workers * 2)
+            for _ in range(num_workers)
         ]
 
         await pagination_url_queue.join()
@@ -272,9 +276,9 @@ async def run_workers(num_workers, index_api, urls, topics):
 
 def generate_num_workers():
     try:
-        num_workers = cpu_count()
+        num_workers = int(os.getenv("NUM_WORKERS", cpu_count() * 2))
     except NotImplementedError:
-        num_workers = 4
+        num_workers = 8
     return num_workers
 
 
@@ -333,7 +337,6 @@ def main():
         else:
             logger.warning(f"Index {raw_index_name} is not found")
     finally:
-        milvus.reindex()
         url_filename = "_".join(urls).replace("*", "").replace(".", "")
         save_dict_as_json(failed, f"failed_urls_{url_filename}.json")
         logger.info(
