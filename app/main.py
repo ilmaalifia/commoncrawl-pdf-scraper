@@ -212,7 +212,11 @@ async def pagination_producer(index_api, urls):
                         {
                             "index_api": index_api,
                             "url": url,
-                            "filter": [f"~mime:.*/{mime_type}$", "=status:200"],
+                            "filter": [
+                                f"~mime:.*/{mime_type}$",
+                                "=status:200",
+                                "languages:eng",
+                            ],
                             "output": "json",
                             "fl": "url,timestamp,mime",
                             "page": page,
