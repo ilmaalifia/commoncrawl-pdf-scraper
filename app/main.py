@@ -276,7 +276,9 @@ async def run_workers(num_workers, index_api, urls, topics):
 
 def generate_num_workers():
     try:
-        num_workers = int(os.getenv("NUM_WORKERS", cpu_count() * 2))
+        default = cpu_count() * 2
+        num = os.getenv("NUM_WORKERS", default)
+        num_workers = int(num) if num else default
     except NotImplementedError:
         num_workers = 8
     return num_workers
