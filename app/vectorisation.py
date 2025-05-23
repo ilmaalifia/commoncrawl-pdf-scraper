@@ -41,7 +41,7 @@ class Vectorisation:
                 return True
         return False
 
-    async def generate_vector_from_pdf_bytes(self, topics: list[str], job: RecordJob):
+    def generate_vector_from_pdf_bytes(self, topics: list[str], job: RecordJob):
         if not job["pdf_bytes"]:
             return []
 

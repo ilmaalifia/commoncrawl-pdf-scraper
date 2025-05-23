@@ -37,7 +37,7 @@ class Milvus:
         logger.info(f"Vector store stats: {self.get_collection_stats()}")
         logger.info(f"Vector store indexes: {self.list_indexes()}")
 
-    async def insert_data(self, data):
+    def insert_data(self, data):
         return self.client.insert(collection_name=self.collection_name, data=data)
 
     def create_schema(self):
@@ -185,7 +185,7 @@ class Milvus:
             ],
         )
 
-    async def is_duplicate(self, source, total_size):
+    def is_duplicate(self, source, total_size):
         res = self.query_by_source(source)
 
         if (
