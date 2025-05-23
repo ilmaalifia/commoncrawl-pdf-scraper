@@ -4,6 +4,7 @@
 # Misc
 *.json
 *.pdf
+*.csv
 
 # Milvus
 *.db

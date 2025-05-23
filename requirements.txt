@@ -1,5 +1,4 @@
 requests==2.32.3
-aiohttp==3.11.12
 pymilvus==2.5.6
 numpy==2.2.4
 bs4==0.0.2
@@ -10,3 +9,6 @@ langchain-community==0.3.24
 langchain-core==0.3.59
 langchain-huggingface==0.1.2
 langchain-text-splitters==0.3.8
+boto3==1.38.21
+warcio==1.7.5
+pyarrow==20.0.0

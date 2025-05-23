@@ -33,9 +33,9 @@ class Milvus:
 
         state = self.client.get_load_state(collection_name=self.collection_name)
 
-        logger.info(f"Collection state: {state.get('state')}")
-        logger.info(f"Collection stats: {self.get_collection_stats()}")
-        logger.info(f"Collection indexes: {self.list_indexes()}")
+        logger.info(f"Vector store state: {state.get('state')}")
+        logger.info(f"Vector store stats: {self.get_collection_stats()}")
+        logger.info(f"Vector store indexes: {self.list_indexes()}")
 
     async def insert_data(self, data):
         return self.client.insert(collection_name=self.collection_name, data=data)

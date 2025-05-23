@@ -12,5 +12,5 @@ pip install -r requirements.txt
 
 
 ```
-python -m app.main --index-name=CC-MAIN-2025-18 --url="*.gov" --url="*.com" --topic="virtual power plant"
+python -m app.main --index="CC-MAIN-2025-18" --topic="virtual power plant"
 ```
