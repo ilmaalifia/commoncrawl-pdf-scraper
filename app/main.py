@@ -111,8 +111,7 @@ if __name__ == "__main__":
     s3_reader = S3Reader(job_queue)
     logger = setup_logger(__name__)
     try:
-        # s3_path = athena_index_query.run(index)
-        s3_path = "s3://mahardika-bucket/athena-index-query/CC-MAIN-2025-18/2025-05-23_00-56-06"
+        s3_path = athena_index_query.run(index)
 
         loader = Process(target=s3_reader.run, args=(s3_path,))
         loader.start()
@@ -120,7 +119,9 @@ if __name__ == "__main__":
         workers = []
         num_workers = cpu_count() // 2
         for _ in range(num_workers):
-            p = Process(target=pipeline_worker, args=(job_queue, topics, counter))
+            p = Process(
+                target=pipeline_worker, args=(job_queue, topics, counter, failed)
+            )
             p.start()
             workers.append(p)
         loader.join()

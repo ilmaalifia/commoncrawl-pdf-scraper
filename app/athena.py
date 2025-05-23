@@ -35,7 +35,7 @@ class AthenaIndexQuery:
                 AND content_languages = 'eng'
                 AND fetch_status = 200
                 AND content_mime_type IN ({", ".join(f"'{mime}'" for mime in MIME_TYPES)})
-            {'LIMIT 1000000' if os.getenv("TEST").lower() == "true" else ''}
+            {'LIMIT 10000' if os.getenv("TEST").lower() == "true" else ''}
         ) TO '{bucket_path}' WITH (format = 'PARQUET', compression = 'SNAPPY')
         """
 
