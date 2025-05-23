@@ -38,7 +38,7 @@ def pipeline_worker(job_queue: Queue, topics: List[str], counter: dict, failed: 
                 )
 
             for record in records:
-                if record["pdf_bytes"]:
+                if record.get("pdf_bytes"):
                     vector_data = vectorisation.generate_vector_from_pdf_bytes(
                         topics=topics, job=record
                     )
