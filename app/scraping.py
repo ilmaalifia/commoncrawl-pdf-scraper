@@ -124,6 +124,4 @@ class Scraping:
         return {}
 
     def process_pdf_urls(self, pdf_urls: List[str]) -> List[RecordJob]:
-        with ThreadPoolExecutor() as executor:
-            results = list(executor.map(self.fetch_pdf, pdf_urls))
-        return results
+        return [self.fetch_pdf(url) for url in pdf_urls]

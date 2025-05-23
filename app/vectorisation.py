@@ -1,3 +1,4 @@
+import gc
 import os
 import uuid
 
@@ -34,6 +35,9 @@ class Vectorisation:
         pages_embedding = self.model_embeddings.embed_documents(pages)
         topic_embeddings = self.model_embeddings.embed_documents(topics)
         similarities = cosine_similarity(topic_embeddings, pages_embedding)
+
+        del pages_embedding
+        del topic_embeddings
 
         for topic, similarity in zip(topics, similarities):
             logger.info(f"Similarity for topic '{topic}': {similarity[0]}")
@@ -84,4 +88,7 @@ class Vectorisation:
                     "timestamp": int(job["timestamp"]),
                 }
             )
+        del chunks
+        del dense_vectors
+        gc.collect()
         return data

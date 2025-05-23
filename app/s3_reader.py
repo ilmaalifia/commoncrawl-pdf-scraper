@@ -1,4 +1,4 @@
-from multiprocessing import Queue
+from queue import Queue
 
 import pyarrow.dataset as ds
 from app.utils import setup_logger
