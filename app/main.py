@@ -1,5 +1,7 @@
 import argparse
+import json
 import os
+import time
 from datetime import datetime
 from multiprocessing import Manager, Process, Queue, cpu_count
 from typing import List
@@ -16,7 +18,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-def pipeline_worker(job_queue: Queue, topics: List[str], counter: dict):
+def pipeline_worker(job_queue: Queue, topics: List[str], counter: dict, failed: dict):
     logger = setup_logger(f"worker-{os.getpid()}")
     scraping = Scraping(boto3.Session(region_name=REGION_NAME))
     vectorisation = Vectorisation()
@@ -54,14 +56,27 @@ def pipeline_worker(job_queue: Queue, topics: List[str], counter: dict):
         except Exception as e:
             logger.error(f"Error processing: {e}")
             counter["failed"] += 1
-            # failed[warc_job["url"]] = str(e)
+            failed[warc_job.get("url")] = str(e)
         finally:
             logger.info(
                 f"Success: {counter['success']}, Failed: {counter['failed']}, Empty: {counter['empty']}, Duplicate: {counter['duplicate']}"
             )
 
 
+def save_dict_as_json(data: dict, filename: str):
+    try:
+        current_dir = os.getcwd()
+        path = os.path.join(current_dir, filename)
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+    except TypeError as e:
+        raise TypeError(f"Data contains non-serializable objects: {e}")
+    except Exception as e:
+        raise IOError(f"Failed to write JSON file: {e}")
+
+
 if __name__ == "__main__":
+    start_time = time.time()
     parser = argparse.ArgumentParser(description="PDF Scraper")
     group = parser.add_mutually_exclusive_group()
     group.add_argument(
@@ -90,6 +105,7 @@ if __name__ == "__main__":
     topics = args.topic
     manager = Manager()
     counter = manager.dict({"success": 0, "failed": 0, "empty": 0, "duplicate": 0})
+    failed = manager.dict()
     job_queue = Queue()
     athena_index_query = AthenaIndexQuery(boto3.Session(region_name=REGION_NAME))
     s3_reader = S3Reader(job_queue)
@@ -113,7 +129,11 @@ if __name__ == "__main__":
         for p in workers:
             p.join()
     finally:
+        end_time = time.time()
+        elapsed = end_time - start_time
         logger.info(
             f"Success: {counter['success']}, Failed: {counter['failed']}, Empty: {counter['empty']}, Duplicate: {counter['duplicate']}"
         )
         logger.info(f"Total scanned: {sum(counter.values())}")
+        logger.info(f"Total running time: {elapsed:.2f} seconds")
+        save_dict_as_json(dict(failed), "failed_urls.json")
