@@ -5,7 +5,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from queue import Empty, Queue
-from threading import Lock, Thread, get_ident
+from threading import Lock, Semaphore, Thread, get_ident
 from typing import List
 
 import boto3
@@ -31,6 +31,9 @@ counter = {"success": 0, "failed": 0, "empty": 0, "duplicate": 0}
 failed = {}
 counter_lock = Lock()
 failed_lock = Lock()
+MAX_WORKERS = 32
+VECTOR_WORKERS = 2
+vector_semaphore = Semaphore(VECTOR_WORKERS)
 
 
 def pipeline_worker(
@@ -51,21 +54,27 @@ def pipeline_worker(
                 )
 
             for record in records:
-                if record.get("pdf_bytes"):
-                    vector_data = vectorisation.generate_vector_from_pdf_bytes(
-                        topics=topics, job=record
-                    )
-                    if vector_data:
-                        inserted = milvus.insert_data(vector_data)
-                        if inserted.get("insert_count", 0) > 0:
-                            with counter_lock:
-                                counter["success"] += 1
-                            logger.info(
-                                f"[Thread ID {get_ident()}] Successfully inserted {inserted['insert_count']} data of {record['url']}"
+                pdf_bytes = record.get("pdf_bytes")
+                if pdf_bytes:
+                    if not milvus.is_duplicate(record.get("url"), len(pdf_bytes)):
+                        with vector_semaphore:
+                            vector_data = vectorisation.generate_vector_from_pdf_bytes(
+                                topics=topics, job=record
                             )
-                        else:
-                            with counter_lock:
-                                counter["empty"] += 1
+                            if vector_data:
+                                inserted = milvus.insert_data(vector_data)
+                                if inserted.get("insert_count", 0) > 0:
+                                    with counter_lock:
+                                        counter["success"] += 1
+                                    logger.info(
+                                        f"[Thread ID {get_ident()}] Successfully inserted {inserted['insert_count']} data of {record['url']}"
+                                    )
+                                else:
+                                    with counter_lock:
+                                        counter["empty"] += 1
+                    else:
+                        with counter_lock:
+                            counter["duplicate"] += 1
                 else:
                     with counter_lock:
                         counter["empty"] += 1
@@ -132,7 +141,7 @@ if __name__ == "__main__":
         loader = Thread(target=s3_reader.run, args=(s3_path,))
         loader.start()
 
-        num_workers = min(10, os.cpu_count() * 2)
+        num_workers = min(MAX_WORKERS, os.cpu_count() * 4)
         workers = []
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
             for _ in range(num_workers):

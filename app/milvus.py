@@ -1,3 +1,4 @@
+import gc
 import os
 
 from app.utils import setup_logger
@@ -38,7 +39,15 @@ class Milvus:
         logger.info(f"Vector store indexes: {self.list_indexes()}")
 
     def insert_data(self, data):
-        return self.client.insert(collection_name=self.collection_name, data=data)
+        count = {"insert_count": 0}
+        batch_size = 100
+        for i in range(0, len(data), batch_size):
+            result = self.client.insert(
+                collection_name=self.collection_name, data=data[i : i + batch_size]
+            )
+            count["insert_count"] += result.get("insert_count", 0)
+        gc.collect()
+        return count
 
     def create_schema(self):
         schema = CollectionSchema(

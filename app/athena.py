@@ -8,17 +8,18 @@ from dotenv import load_dotenv
 
 load_dotenv()
 logger = setup_logger(__name__)
-BUCKET_NAME = os.getenv("BUCKET_NAME")
 
 
 class AthenaIndexQuery:
     def __init__(self, session: boto3.Session):
         self.athena = session.client("athena")
 
-    def run(self, index_name="CC-MAIN-2025-18"):
+    def run(self, index_name: str):
         current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        bucket_name = os.getenv("BUCKET_NAME")
+        assert bucket_name, "BUCKET_NAME is not set in .env file"
         bucket_path = (
-            f"s3://{BUCKET_NAME}/athena-index-query/{index_name}/{current_time}"
+            f"s3://{bucket_name}/athena-index-query/{index_name}/{current_time}"
         )
         query = f"""
         UNLOAD (

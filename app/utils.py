@@ -3,7 +3,7 @@ import sys
 
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36"
 NUMBER_OF_PAGES_TO_CHECK = 5
-SIMILARITY_THRESHOLD = 0.1
+SIMILARITY_THRESHOLD = 0.3
 MIME_TYPES = ["application/pdf", "text/pdf", "text/html"]
 REGION_NAME = "us-east-1"
 
