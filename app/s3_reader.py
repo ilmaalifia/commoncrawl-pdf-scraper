@@ -1,3 +1,4 @@
+import time
 from queue import Queue
 
 import pyarrow.dataset as ds
@@ -15,25 +16,30 @@ class S3Reader:
         self.s3 = S3FileSystem()
 
     def run(self, s3_path: str):
-        if s3_path.startswith("s3://"):
-            s3_path = s3_path[5:]
-        files_info = self.s3.get_file_info(FileSelector(s3_path))
+        try:
+            if s3_path.startswith("s3://"):
+                s3_path = s3_path[5:]
+            files_info = self.s3.get_file_info(FileSelector(s3_path))
 
-        def is_data_file(file_info):
-            if file_info.type == FileType.File and (
-                file_info.path.endswith(".csv") or file_info.path.endswith(".metadata")
-            ):
-                return False
-            return True
+            def is_data_file(file_info):
+                if file_info.type == FileType.File and (
+                    file_info.path.endswith(".csv")
+                    or file_info.path.endswith(".metadata")
+                ):
+                    return False
+                return True
 
-        data_files = [f.path for f in files_info if is_data_file(f)]
+            data_files = [f.path for f in files_info if is_data_file(f)]
 
-        dataset = ds.dataset(data_files, format="parquet", filesystem=self.s3)
-        scanner = dataset.scanner(batch_size=1000)
-        for batch in scanner.to_batches():
-            for record in batch.to_pylist():
-                try:
-                    self.queue.put(record)
-                except Exception as e:
-                    logger.error(f"Failed to put record in queue: {e}")
-        logger.info("Done pushing all indexes to queue")
+            dataset = ds.dataset(data_files, format="parquet", filesystem=self.s3)
+            scanner = dataset.scanner(batch_size=1000)
+            logger.info("Indexes are being pushed to queue. Please wait ...")
+            for batch in scanner.to_batches():
+                for record in batch.to_pylist():
+                    try:
+                        self.queue.put(record)
+                    except Exception as e:
+                        logger.error(f"Failed to put record in queue: {e}")
+            logger.info("Done pushing all indexes to queue")
+        except Exception as e:
+            logger.error(f"Error reading from S3: {e}")

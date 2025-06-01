@@ -32,6 +32,7 @@ class RecordJob(TypedDict):
     pdf_bytes: bytes | bytearray
     pdf_urls: List[str]
     timestamp: str | int
+    failed: str | None
 
 
 class Scraping:
@@ -79,11 +80,12 @@ class Scraping:
                     is_pdf = "pdf" in warc_job["mime_type"]
                     is_html = "html" in warc_job["mime_type"]
                     response = record.content_stream().read()
-                    pdf_bytes = (
-                        response
-                        if (is_pdf and self.is_valid_pdf(response))
-                        else self.fetch_pdf(warc_job["url"]).get("pdf_bytes")
-                    )
+                    if is_pdf and self.is_valid_pdf(response):
+                        pdf_bytes = response
+                    elif is_pdf:
+                        pdf_bytes = self.fetch_pdf(warc_job["url"]).get("pdf_bytes")
+                    else:
+                        pdf_bytes = None
                     pdf_urls = (
                         self.find_pdf_from_html(response, warc_job["url"])
                         if is_html
@@ -104,22 +106,32 @@ class Scraping:
 
     def fetch_pdf(self, url) -> RecordJob:
         try:
+            pdf_bytes = None
             response = requests.get(url, headers={"User-Agent": USER_AGENT}, timeout=10)
             if response.status_code == 200:
                 content_type = response.headers.get("Content-Type", "").lower()
                 content_lang = response.headers.get("Content-Language", "").lower()
                 if "pdf" in content_type and content_lang in ["en", "eng", "english"]:
-                    return RecordJob(
-                        url=url,
-                        is_pdf=True,
-                        is_html=False,
-                        pdf_bytes=response.content,
-                        pdf_urls=[],
-                        timestamp=int(time.time()),
-                    )
+                    pdf_bytes = response.content
+            return RecordJob(
+                url=url,
+                is_pdf=True if pdf_bytes else False,
+                is_html=False,
+                pdf_bytes=pdf_bytes,
+                pdf_urls=[],
+                timestamp=int(time.time()),
+                failed=None,
+            )
         except Exception as e:
-            logger.error(f"Failed to fetch {url}: {str(e)}")
-        return {}
+            return RecordJob(
+                url=url,
+                is_pdf=False,
+                is_html=False,
+                pdf_bytes=b"",
+                pdf_urls=[],
+                timestamp=int(time.time()),
+                failed=str(e),
+            )
 
     def process_pdf_urls(self, pdf_urls: List[str]) -> List[RecordJob]:
         return [self.fetch_pdf(url) for url in pdf_urls]

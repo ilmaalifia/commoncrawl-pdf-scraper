@@ -1,10 +1,9 @@
 import argparse
-import json
 import os
 import time
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
-from queue import Empty, Queue
+from queue import Queue
 from threading import Lock, Semaphore, Thread, get_ident
 from typing import List
 
@@ -22,17 +21,15 @@ logger = setup_logger(__name__)
 
 session = boto3.Session(region_name=REGION_NAME)
 athena_index_query = AthenaIndexQuery(session)
-job_queue = Queue()
+job_queue = Queue(maxsize=10_000)
 s3_reader = S3Reader(job_queue)
 scraping = Scraping(session)
 vectorisation = Vectorisation()
 milvus = Milvus()
 counter = {"success": 0, "failed": 0, "empty": 0, "duplicate": 0}
-failed = {}
 counter_lock = Lock()
-failed_lock = Lock()
-MAX_WORKERS = 32
-VECTOR_WORKERS = 2
+MAX_WORKERS = 64
+VECTOR_WORKERS = 1
 vector_semaphore = Semaphore(VECTOR_WORKERS)
 
 
@@ -41,12 +38,12 @@ def pipeline_worker(
 ):
     while True:
         try:
-            warc_job = job_queue.get(timeout=20)
+            warc_job = job_queue.get()
+
             if warc_job is None:
+                logger.info(f"[Thread ID {get_ident()}] Received sentinel, exiting.")
                 break
-            logger.info(
-                f"[Thread ID {get_ident()}] Processing {warc_job['url']} with mime type {warc_job['mime_type']}"
-            )
+
             records = [scraping.process_warc_record(warc_job)]
             if records[0] and records[0].get("pdf_urls", []):
                 records.extend(
@@ -55,6 +52,7 @@ def pipeline_worker(
 
             for record in records:
                 pdf_bytes = record.get("pdf_bytes")
+                failed = record.get("failed")
                 if pdf_bytes:
                     if not milvus.is_duplicate(record.get("url"), len(pdf_bytes)):
                         with vector_semaphore:
@@ -75,45 +73,35 @@ def pipeline_worker(
                     else:
                         with counter_lock:
                             counter["duplicate"] += 1
+                elif failed:
+                    logger.info(
+                        f"[Thread ID {get_ident()}] Failed here {warc_job.get('url')}: {failed}"
+                    )
+                    raise Exception(failed)
                 else:
                     with counter_lock:
                         counter["empty"] += 1
-        except Empty:
-            logger.info(f"[Thread ID {get_ident()}] Queue empty, waiting for jobs ...")
-            continue
         except Exception as e:
             logger.error(f"[Thread ID {get_ident()}] Error processing: {e}")
             with counter_lock:
                 counter["failed"] += 1
-            with failed_lock:
-                failed[warc_job.get("url")] = str(e)
         finally:
             job_queue.task_done()
+            logger.info(
+                f"[Thread ID {get_ident()}] Task done for {warc_job.get('url')}"
+            )
             logger.info(
                 f"[Thread ID {get_ident()}] Success: {counter['success']}, Failed: {counter['failed']}, Empty: {counter['empty']}, Duplicate: {counter['duplicate']}"
             )
 
 
-def save_dict_as_json(data: dict, filename: str):
-    try:
-        current_dir = os.getcwd()
-        path = os.path.join(current_dir, filename)
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=4, ensure_ascii=False)
-    except TypeError as e:
-        raise TypeError(f"Data contains non-serializable objects: {e}")
-    except Exception as e:
-        raise IOError(f"Failed to write JSON file: {e}")
-
-
 if __name__ == "__main__":
     start_time = time.time()
     parser = argparse.ArgumentParser(description="PDF Scraper")
-    group = parser.add_mutually_exclusive_group()
-    group.add_argument(
+    parser.add_argument(
         "--index",
         type=str,
-        required=False,
+        required=True,
         help='CC index name to use with format CC-MAIN-<YYYY>-<WW>. Example: --index="CC-MAIN-2025-13"',
     )
     parser.add_argument(
@@ -135,8 +123,12 @@ if __name__ == "__main__":
 
     topics = args.topic
 
+    logger.info(f"Processing index: {index}")
     try:
+        status = athena_index_query.update_index()
+        logger.info(f"Index status: {status}")
         s3_path = athena_index_query.run(index)
+        logger.info(f"Index path: {s3_path}")
 
         loader = Thread(target=s3_reader.run, args=(s3_path,))
         loader.start()
@@ -144,9 +136,9 @@ if __name__ == "__main__":
         num_workers = min(MAX_WORKERS, os.cpu_count() * 4)
         workers = []
         with ThreadPoolExecutor(max_workers=num_workers) as executor:
-            for _ in range(num_workers):
-                executor.submit(pipeline_worker, topics)
-
+            futures = [
+                executor.submit(pipeline_worker, topics) for _ in range(num_workers)
+            ]
             loader.join()
             for _ in range(num_workers):
                 job_queue.put(None)  # Put sentinel values to stop workers
@@ -159,4 +151,3 @@ if __name__ == "__main__":
         )
         logger.info(f"Total scanned: {sum(counter.values())}")
         logger.info(f"Total running time: {elapsed:.2f} seconds")
-        save_dict_as_json(dict(failed), "failed_urls.json")

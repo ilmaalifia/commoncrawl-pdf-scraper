@@ -9,6 +9,9 @@ from dotenv import load_dotenv
 load_dotenv()
 logger = setup_logger(__name__)
 
+BUCKET_NAME = os.getenv("BUCKET_NAME")
+assert BUCKET_NAME, "BUCKET_NAME is not set in .env file"
+
 
 class AthenaIndexQuery:
     def __init__(self, session: boto3.Session):
@@ -16,10 +19,8 @@ class AthenaIndexQuery:
 
     def run(self, index_name: str):
         current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        bucket_name = os.getenv("BUCKET_NAME")
-        assert bucket_name, "BUCKET_NAME is not set in .env file"
         bucket_path = (
-            f"s3://{bucket_name}/athena-index-query/{index_name}/{current_time}"
+            f"s3://{BUCKET_NAME}/athena-index-query/{index_name}/{current_time}"
         )
         query = f"""
         UNLOAD (
@@ -49,9 +50,31 @@ class AthenaIndexQuery:
         while True:
             status = self.athena.get_query_execution(QueryExecutionId=execution_id)
             state = status["QueryExecution"]["Status"]["State"]
-
+            logger.info(f"Query state: {state}")
             if state in ["SUCCEEDED"]:
                 return bucket_path
+            elif state in ["FAILED", "CANCELLED"]:
+                raise Exception(f"Query failed with status {status}")
+            time.sleep(5)
+
+    def update_index(self):
+        """Update the Athena index to include CCIndex new partitions."""
+        current_time = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        bucket_path = (
+            f"s3://{BUCKET_NAME}/athena-index-query/update-index/{current_time}"
+        )
+        query = "MSCK REPAIR TABLE ccindex"
+        execution = self.athena.start_query_execution(
+            QueryString=query, ResultConfiguration={"OutputLocation": f"{bucket_path}"}
+        )
+        execution_id = execution["QueryExecutionId"]
+
+        while True:
+            status = self.athena.get_query_execution(QueryExecutionId=execution_id)
+            state = status["QueryExecution"]["Status"]["State"]
+            logger.info(f"Query state: {state}")
+            if state in ["SUCCEEDED"]:
+                return True
             elif state in ["FAILED", "CANCELLED"]:
                 raise Exception(f"Query failed with status {status}")
             time.sleep(5)
