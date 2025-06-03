@@ -50,7 +50,6 @@ class Vectorisation:
             return []
 
         chunks = []
-        data = []
 
         try:
             with fitz.open(stream=job["pdf_bytes"], filetype="pdf") as doc:
@@ -76,19 +75,20 @@ class Vectorisation:
         dense_vectors = self.model_embeddings.embed_documents(
             [chunk.page_content for chunk in chunks]
         )
-        for chunk, dense_vector in zip(chunks, dense_vectors):
-            data.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "dense_vector": dense_vector,
-                    "text": chunk.page_content,
-                    "source": chunk.metadata["source"],
-                    "page": chunk.metadata["page"],
-                    "total_size": chunk.metadata["total_size"],
-                    "timestamp": int(job["timestamp"]),
-                }
-            )
+
         del chunks
         del dense_vectors
         gc.collect()
-        return data
+
+        return [
+            {
+                "id": str(uuid.uuid4()),
+                "dense_vector": dense_vector,
+                "text": chunk.page_content,
+                "source": chunk.metadata["source"],
+                "page": chunk.metadata["page"],
+                "total_size": chunk.metadata["total_size"],
+                "timestamp": int(job["timestamp"]),
+            }
+            for chunk, dense_vector in zip(chunks, dense_vectors)
+        ]
